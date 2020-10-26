@@ -4,6 +4,7 @@ import discord
 import asyncio
 import nest_asyncio
 import datetime
+import re
 
 
 # Twitch client init
@@ -34,19 +35,34 @@ async def event_message(ctx):
     if ctx.author.name.lower() == os.environ['TWITCH_BOT_NICK'].lower():
         return
 
-    user_is_mod: bool = ctx.author.is_mod
-    print(ctx.author.name.lower() + " mod status: " + user_is_mod)
-    if not user_is_mod:
-        return
-
-    print("Received Twitch command: " + ctx.content)
+    print(ctx.author.name + ": " + ctx.content)
     await twitch.handle_commands(ctx)
 
 
 @twitch.command(name='timestamp')
 async def handle_timestamp(ctx):
-    desc = ctx.content.replace('!timestamp ', '')
-    await send_timestamp(desc)
+
+    if ctx.author.is_mod:
+        desc = ctx.content.replace('!timestamp ', '')
+        await send_timestamp(desc)
+
+
+@twitch.command(name='clip')
+async def handle_clip(ctx):
+    if ctx.author.is_mod:
+        clip_url = await twitch.create_clip(os.environ['TWITCH_TMI_TOKEN'].replace('oauth:', ''), os.environ['TWITCH_CLIENT_ID'])
+        await ctx.send("@" + ctx.author.name + ", here is your clip of the last 60 seconds: " + clip_url)
+        await send_clip(clip_url)
+
+
+@twitch.command(name='link')
+async def handle_link(ctx):
+    content = ctx.content.replace('!link ', '')
+    url = re.search("(?P<url>https?://[^\s]+)", content).group("url")
+    desc = content.replace(url, '')
+    message = ctx.author.name + ": " + desc + " - " + url
+    await ctx.send(desc + " submitted.")
+    await send_link(message)
 
 
 # Discord event handling
@@ -62,8 +78,20 @@ async def send_timestamp(desc):
     await channel.send(message)
 
 
+async def send_clip(desc):
+    channel = discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
+    message = get_UTC_timestamp() + ' - ' + desc
+    print("Sending the clip message '" + message + "' to Discord")
+    await channel.send(message)
+
+
+async def send_link(message):
+    channel = discord.get_channel(768826969252823060)
+    await channel.send(message)
+
+
 def get_UTC_timestamp():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S') + " UTC"
 
 
 async def start_twitch():
@@ -79,6 +107,7 @@ async def start_discord():
 async def main():
     nest_asyncio.apply()
     twitch_started = start_twitch()
+    test = await asyncio.sleep(1)
     discord_started = start_discord()
     await asyncio.wait([discord_started, twitch_started])
 

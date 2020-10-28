@@ -30,18 +30,18 @@ discord = discord.Client()
 async def event_ready():
     """Called once when the bot goes online."""
     print(f"{os.environ['TWITCH_BOT_NICK']} has connected to Twitch!")
-    # ws = twitch._ws  # this is only needed to send messages within event_ready
-    # await ws.send_privmsg(os.environ['TWITCH_CHANNEL_NAME'], f"/me has landed!")
+    ws = twitch._ws  # this is only needed to send messages within event_ready
+    await ws.send_privmsg(os.environ['TWITCH_CHANNEL_NAME'], f"/me has landed!")
 
 
 @twitch.event
 async def event_message(ctx):
     """Runs every time a message is sent in chat."""
     # make sure the bot ignores itself and the streamer
-    print(ctx.author.name + ": " + ctx.content)
 
     await check_channel(ctx)
-    await random_giveaway()
+    # is_winner = await random_giveaway(ctx)
+    print(ctx.author.name + ": " + ctx.content)
     if await check_bot(ctx.author.name.lower()):
         await check_raffle(ctx.content)
         return
@@ -125,15 +125,14 @@ async def check_raffle(message):
         await send_twitch_chat("!join")
 
 
-async def random_giveaway():
+async def random_giveaway(ctx):
     dice = ([False] * 20) + [True]
     is_winner = random.choice(dice)
     print("Raffle giveaway winner? " + str(is_winner))
     if is_winner:
-        chatters = await twitch.get_chatters(channel.name)
-        winner: str = random.choice(chatters.viewers)
         await send_twitch_chat("Winner winner chicken dinner!")
-        await send_twitch_chat("!addpoints @" + winner + " " + str(get_random_pot_amount()))
+        await send_twitch_chat("!addpoints @" + ctx.author.name.lower() + " " + str(get_random_pot_amount()))
+    return is_winner
 
 
 def get_random_pot_amount():

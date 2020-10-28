@@ -1,6 +1,6 @@
 import os
 from twitchio.ext import commands
-from twitchio import *
+import twitchio
 import discord
 import asyncio
 import nest_asyncio
@@ -17,7 +17,7 @@ twitch = commands.Bot(
     initial_channels=["#" + os.environ['TWITCH_CHANNEL_NAME']]
 )
 
-channel: dataclasses.Channel
+last_ctx: twitchio.dataclasses.Context
 command_list: list = ["!timestamp", "!clip", "!commands"]
 bot_list: list = ["streamelements", "nightbot", "internationalbot"]
 super_users_list: list = ["sisyphus", "taylor renee"]
@@ -30,20 +30,17 @@ discord = discord.Client()
 async def event_ready():
     """Called once when the bot goes online."""
     print(f"{os.environ['TWITCH_BOT_NICK']} has connected to Twitch!")
-    ws = twitch._ws  # this is only needed to send messages within event_ready
-    await ws.send_privmsg(os.environ['TWITCH_CHANNEL_NAME'], f"/me has landed!")
 
 
 @twitch.event
 async def event_message(ctx):
     """Runs every time a message is sent in chat."""
     # make sure the bot ignores itself and the streamer
-
-    await check_channel(ctx)
-    # is_winner = await random_giveaway(ctx)
     print(ctx.author.name + ": " + ctx.content)
+
+    await update_ctx(ctx)
     if await check_bot(ctx.author.name.lower()):
-        await check_raffle(ctx.content)
+        await try_join_raffle(ctx)
         return
 
     for command in command_list:
@@ -105,50 +102,41 @@ async def on_message(message):
 # Custom Methods
 
 async def send_moderator_permissions_error(ctx):
-    await ctx.send("Only moderators can use that command!")
+    await send_twitch_chat(ctx, "Only moderators can use that command!")
 
 
-async def send_twitch_chat(message):
-    await channel.send(message)
+async def send_twitch_chat(ctx, message):
+    failed = False
 
-
-async def check_channel(ctx):
-    global channel
     try:
-        channel
-    except NameError:
-        channel = ctx.channel
+        if ctx is None:
+            raise TypeError
+        await ctx.send(message)
+    except (TypeError, NameError, ValueError, twitchio.errors.EchoMessageWarning):
+        failed = True
+
+    if failed:
+        global last_ctx
+        try:
+            await last_ctx.send(message)
+        except twitchio.errors.EchoMessageWarning:
+            return
 
 
-async def check_raffle(message):
-    if "a Multi-Raffle has begun for" in message:
-        await send_twitch_chat("!join")
+async def update_ctx(ctx):
+    global last_ctx
+    if ctx.author.name.lower() is not "internationalbot":
+        last_ctx = ctx
 
 
-async def random_giveaway(ctx):
-    dice = ([False] * 20) + [True]
-    is_winner = random.choice(dice)
-    print("Raffle giveaway winner? " + str(is_winner))
-    if is_winner:
-        await send_twitch_chat("Winner winner chicken dinner!")
-        await send_twitch_chat("!addpoints @" + ctx.author.name.lower() + " " + str(get_random_pot_amount()))
-    return is_winner
-
-
-def get_random_pot_amount():
-    pot: list = []
-    for i in range(10000):
-        if i < 100:
-            pot += ([i] * 3)
-        if 1000 > i > 100:
-            pot += ([i] * 2)
-        if 10000 > i > 1000:
-            pot += ([i] * 1)
-    return random.choice(pot)
+async def try_join_raffle(ctx):
+    if "a Multi-Raffle has begun for" in ctx.content:
+        await send_twitch_chat(ctx, "Oh boy a raffle!")
+        await send_twitch_chat(ctx, "!join")
 
 
 async def check_bot(name):
-    if name in bot_list:
+    if name.lower() in bot_list:
         return True
     else:
         return False
@@ -158,7 +146,7 @@ async def relay_message(message):
     if "private" in message.channel.type.name:
         username = message.author.name.lower()
         if username in super_users_list:
-            await send_twitch_chat(message.content)
+            await send_twitch_chat(None, message.content)
         else:
             return
 
@@ -205,10 +193,11 @@ async def main():
 
 
 if __name__ == "__main__":
+    loop: asyncio.AbstractEventLoop
     try:
         loop = asyncio.get_event_loop()
         d1, d2 = loop.run_until_complete(main())
-    except Exception as e:
+    except RuntimeError:
         pass
     finally:
         loop.close()

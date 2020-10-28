@@ -39,13 +39,9 @@ async def event_message(ctx):
     print(ctx.author.name + ": " + ctx.content)
 
     await update_ctx(ctx)
-    if await check_bot(ctx.author.name.lower()):
-        await try_join_raffle(ctx)
-        return
+    await try_join_raffle(ctx)
 
-    for command in command_list:
-        if command in ctx.content:
-            await twitch.handle_commands(ctx)
+    await twitch.handle_commands(ctx)
 
 
 @twitch.command(name='timestamp')
@@ -53,7 +49,7 @@ async def handle_timestamp(ctx):
     if ctx.author.is_mod:
         desc = ctx.content.replace('!timestamp ', '')
         await send_timestamp(desc)
-        await ctx.send("Successfully sent timestamp to #intl-timestamps!")
+        await send_twitch_chat(ctx, "Successfully sent timestamp to #intl-timestamps!")
     else:
         await send_moderator_permissions_error(ctx)
 
@@ -65,14 +61,14 @@ async def handle_clip(ctx):
         clip_url = await twitch.create_clip(os.environ['TWITCH_TMI_TOKEN'],
                                             os.environ['TWITCH_CLIENT_ID'])
         await send_clip(clip_url)
-        await ctx.send("@" + ctx.author.name + ", here is your clip of the last 60 seconds: " + clip_url)
+        await send_twitch_chat(ctx, "@" + ctx.author.name + ", here is your clip of the last 60 seconds: " + clip_url)
     else:
         await send_moderator_permissions_error(ctx)
 
 
 @twitch.command(name='commands')
 async def handle_clip(ctx):
-    await ctx.send("Command list: !timestamp, !clip")
+    await send_twitch_chat(ctx, "Command list: !timestamp, !clip")
 
 
 @twitch.command(name='link')
@@ -81,7 +77,7 @@ async def handle_link(ctx):
     url = re.search("(?P<url>https?://[^\s]+)", content).group("url")
     desc = content.replace(url, '')
     message = ctx.author.name + ": " + desc + " - " + url
-    await ctx.send(desc + " submitted.")
+    await send_twitch_chat(ctx, desc + " submitted.")
     await send_link(message)
 
 
@@ -106,21 +102,15 @@ async def send_moderator_permissions_error(ctx):
 
 
 async def send_twitch_chat(ctx, message):
-    failed = False
-
+    if ctx is None:
+        raise TypeError
     try:
-        if ctx is None:
-            raise TypeError
-        await ctx.send(message)
-    except (TypeError, NameError, ValueError, twitchio.errors.EchoMessageWarning):
-        failed = True
-
-    if failed:
+        ctx
+    except (AttributeError, TypeError, NameError, ValueError, twitchio.errors.EchoMessageWarning):
         global last_ctx
-        try:
-            await last_ctx.send(message)
-        except twitchio.errors.EchoMessageWarning:
-            return
+        await last_ctx.channel.send(message)
+    finally:
+        await ctx.send(message)
 
 
 async def update_ctx(ctx):
@@ -130,9 +120,10 @@ async def update_ctx(ctx):
 
 
 async def try_join_raffle(ctx):
-    if "a Multi-Raffle has begun for" in ctx.content:
-        await send_twitch_chat(ctx, "Oh boy a raffle!")
-        await send_twitch_chat(ctx, "!join")
+    if ctx.author.name.lower() in bot_list:
+        if "a Multi-Raffle has begun for" in ctx.content:
+            await send_twitch_chat(ctx, "Oh boy a raffle!")
+            await send_twitch_chat(ctx, "!join")
 
 
 async def check_bot(name):
@@ -152,21 +143,21 @@ async def relay_message(message):
 
 
 async def send_timestamp(desc):
-    discord_channel = discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
+    discord_channel = await discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
     message = get_UTC_timestamp() + ' - ' + desc
     print("Sending the timestamp message '" + message + "' to Discord")
     await discord_channel.send(message)
 
 
 async def send_clip(desc):
-    channel = discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
+    channel = await discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
     message = get_UTC_timestamp() + ' - ' + desc
     print("Sending the clip message '" + message + "' to Discord")
     await channel.send(message)
 
 
 async def send_link(message):
-    channel = discord.get_channel(768826969252823060)
+    channel = await discord.get_channel(768826969252823060)
     await channel.send(message)
 
 

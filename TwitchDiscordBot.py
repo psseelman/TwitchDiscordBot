@@ -6,7 +6,6 @@ import asyncio
 import nest_asyncio
 import datetime
 import re
-import random
 
 # Twitch client init
 twitch = commands.Bot(
@@ -38,10 +37,14 @@ async def event_message(ctx):
     # make sure the bot ignores itself and the streamer
     print(ctx.author.name + ": " + ctx.content)
 
-    await update_ctx(ctx)
-    await try_join_raffle(ctx)
+    update_ctx(ctx)
 
-    await twitch.handle_commands(ctx)
+    if ctx.author.name.lower() in bot_list:
+        await raffle_check(ctx.content)
+        return
+
+    if is_bot_command(ctx.content):
+        await twitch.handle_commands(ctx)
 
 
 @twitch.command(name='timestamp')
@@ -49,9 +52,9 @@ async def handle_timestamp(ctx):
     if ctx.author.is_mod:
         desc = ctx.content.replace('!timestamp ', '')
         await send_timestamp(desc)
-        await send_twitch_chat(ctx, "Successfully sent timestamp to #intl-timestamps!")
+        await send_twitch_chat("Successfully sent timestamp to #intl-timestamps!")
     else:
-        await send_moderator_permissions_error(ctx)
+        await send_moderator_permissions_error()
 
 
 @twitch.command(name='clip')
@@ -61,14 +64,14 @@ async def handle_clip(ctx):
         clip_url = await twitch.create_clip(os.environ['TWITCH_TMI_TOKEN'],
                                             os.environ['TWITCH_CLIENT_ID'])
         await send_clip(clip_url)
-        await send_twitch_chat(ctx, "@" + ctx.author.name + ", here is your clip of the last 60 seconds: " + clip_url)
+        await send_twitch_chat("@" + ctx.author.name + ", here is your clip of the last 60 seconds: " + clip_url)
     else:
-        await send_moderator_permissions_error(ctx)
+        await send_moderator_permissions_error()
 
 
 @twitch.command(name='commands')
-async def handle_clip(ctx):
-    await send_twitch_chat(ctx, "Command list: !timestamp, !clip")
+async def handle_clip():
+    await send_twitch_chat("Command list: !timestamp, !clip")
 
 
 @twitch.command(name='link')
@@ -77,7 +80,7 @@ async def handle_link(ctx):
     url = re.search("(?P<url>https?://[^\s]+)", content).group("url")
     desc = content.replace(url, '')
     message = ctx.author.name + ": " + desc + " - " + url
-    await send_twitch_chat(ctx, desc + " submitted.")
+    await send_twitch_chat(desc + " submitted.")
     await send_link(message)
 
 
@@ -97,36 +100,36 @@ async def on_message(message):
 
 # Custom Methods
 
-async def send_moderator_permissions_error(ctx):
-    await send_twitch_chat(ctx, "Only moderators can use that command!")
+async def send_moderator_permissions_error():
+    await send_twitch_chat("Only moderators can use that command!")
 
 
-async def send_twitch_chat(ctx, message):
-    if ctx is None:
-        raise TypeError
-    try:
-        ctx
-    except (AttributeError, TypeError, NameError, ValueError, twitchio.errors.EchoMessageWarning):
-        global last_ctx
-        await last_ctx.channel.send(message)
-    finally:
-        await ctx.send(message)
+async def send_twitch_chat(message):
+    await last_ctx.channel.send(message)
 
 
-async def update_ctx(ctx):
+def is_bot_command(message):
+    for command in command_list:
+        if command in message:
+            return True
+    return False
+
+
+def update_ctx(ctx):
     global last_ctx
-    if ctx.author.name.lower() is not "internationalbot":
+    if ctx.author.name.lower() in bot_list:
+        return
+    else:
         last_ctx = ctx
 
 
-async def try_join_raffle(ctx):
-    if ctx.author.name.lower() in bot_list:
-        if "a Multi-Raffle has begun for" in ctx.content:
-            await send_twitch_chat(ctx, "Oh boy a raffle!")
-            await send_twitch_chat(ctx, "!join")
+async def raffle_check(message):
+    if "a Multi-Raffle has begun for" in message:
+        await send_twitch_chat("Oh boy a raffle!")
+        await send_twitch_chat("!join")
 
 
-async def check_bot(name):
+def check_bot(name):
     if name.lower() in bot_list:
         return True
     else:
@@ -137,27 +140,27 @@ async def relay_message(message):
     if "private" in message.channel.type.name:
         username = message.author.name.lower()
         if username in super_users_list:
-            await send_twitch_chat(None, message.content)
+            await send_twitch_chat(message.content)
         else:
             return
 
 
 async def send_timestamp(desc):
-    discord_channel = await discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
+    discord_channel = discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
     message = get_UTC_timestamp() + ' - ' + desc
     print("Sending the timestamp message '" + message + "' to Discord")
     await discord_channel.send(message)
 
 
 async def send_clip(desc):
-    channel = await discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
+    channel = discord.get_channel(int(os.environ['DISCORD_CHANNEL_ID']))
     message = get_UTC_timestamp() + ' - ' + desc
     print("Sending the clip message '" + message + "' to Discord")
     await channel.send(message)
 
 
 async def send_link(message):
-    channel = await discord.get_channel(768826969252823060)
+    channel = discord.get_channel(768826969252823060)
     await channel.send(message)
 
 
@@ -177,9 +180,8 @@ async def start_discord():
 
 async def main():
     nest_asyncio.apply()
-    twitch_started = start_twitch()
-    test = await asyncio.sleep(1)
     discord_started = start_discord()
+    twitch_started = start_twitch()
     await asyncio.wait([discord_started, twitch_started])
 
 

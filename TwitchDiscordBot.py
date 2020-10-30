@@ -29,6 +29,7 @@ discord = discord.Client()
 async def event_ready():
     """Called once when the bot goes online."""
     print(f"{os.environ['TWITCH_BOT_NICK']} has connected to Twitch!")
+    await send_twitch_chat("has arrived!")
 
 
 @twitch.event
@@ -105,7 +106,9 @@ async def send_moderator_permissions_error():
 
 
 async def send_twitch_chat(message):
-    await last_ctx.channel.send(message)
+    msg = "/me " + message
+    await twitch._ws.send_privmsg(os.environ['TWITCH_CHANNEL_NAME'], msg)
+    # await last_ctx.channel.send(message)
 
 
 def is_bot_command(message):
@@ -169,19 +172,17 @@ def get_UTC_timestamp():
 
 
 async def start_twitch():
-    twitch.run()
-    return True
+    await twitch.start()
 
 
 async def start_discord():
-    discord.run(os.environ['DISCORD_TOKEN'])
-    return True
+    await discord.start(os.environ['DISCORD_TOKEN'])
 
 
 async def main():
     nest_asyncio.apply()
-    discord_started = start_discord()
     twitch_started = start_twitch()
+    discord_started = start_discord()
     await asyncio.wait([discord_started, twitch_started])
 
 

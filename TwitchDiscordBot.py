@@ -12,6 +12,7 @@ import paramiko
 k = paramiko.RSAKey.from_private_key_file(filename="id_rsa.pem", password=os.environ['SSH_PASS'])
 c = paramiko.SSHClient()
 c.load_system_host_keys()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 c.connect(hostname=os.environ["SERVER_HOST"], username=os.environ["SERVER_USER"], pkey=k)
 

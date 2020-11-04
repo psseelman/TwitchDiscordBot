@@ -10,6 +10,7 @@ twitchio = "*"
 python-dotenv = "*"
 discord = "*"
 nest-asyncio = "*"
+paramiko = "*"
 
 [requires]
 python_version = "3.6"

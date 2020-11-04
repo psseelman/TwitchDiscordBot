@@ -6,6 +6,14 @@ import asyncio
 import nest_asyncio
 import datetime
 import re
+import paramiko
+
+
+k = paramiko.RSAKey.from_private_key_file(filename="id_rsa.pem", password=os.environ['SSH_PASS'])
+c = paramiko.SSHClient()
+c.load_system_host_keys()
+
+c.connect(hostname=os.environ["SERVER_HOST"], username=os.environ["SERVER_USER"], pkey=k)
 
 # Twitch client init
 twitch = commands.Bot(
@@ -83,6 +91,18 @@ async def handle_link(ctx):
     message = ctx.author.name + ": " + desc + " - " + url
     await send_twitch_chat(desc + " submitted.")
     await send_link(message)
+
+
+@twitch.command(name="reboot")
+async def handle_restart(ctx):
+    if not ctx.author.is_mod:
+        return
+
+    stdin, stdout, stderr = c.exec_command("systemctl restart streamcapture --user")
+    lines = stdout.readlines()
+    print(lines)
+
+    await send_twitch_chat("Server restart command sent")
 
 
 # Discord event handling
